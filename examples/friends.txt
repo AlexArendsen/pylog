@@ -1,0 +1,25 @@
+rel `alice` <friends> `frank`,`eve`
+rel `bob` <friends> `gloria`
+rel `bob` <enemies> `eve`
+rel `chuck` <friends> `frank`,`dan`
+rel `chuck` <enemies> `alice`
+rel `dan` <enemies> `gloria`,`henrietta`
+rel `frank` <friends> `gloria`
+rel `gloria` <friends> `henrietta`
+
+rel `frank` <followers=follows> `chuck`,`disney animation`,`dreamworks`
+rel `chuck` <followers=follows> `dan`,`frank`,`linus torvalds`
+rel `dan` <followers=follows> `chuck`,`greenpeace`,`github`
+rel `alice` <followers=follows> `frank`
+
+rel `indie` <music preference=fans> `alice`,`eve`
+rel `metal` <music preference=fans> `chuck`,`bob`
+rel `edm` <music preference=fans> `chuck`,`frank`,`gloria`
+rel `country` <music preference=fans> `henrietta`,`dan`
+rel `pop` <music preference=fans> `frank`
+
+rel `bloc party`,`death cab for cutie`,`sufjan stevens`,`anamanaguchi` <artists=genres> `indie`
+rel `opeth`,`dream theater`,`pantera` <artists=genres> `metal`
+rel `drop tower`,`anamanaguchi` <artists=genres> `edm`
+rel `jason aldean`,`george strait`,`sugarland` <artists=genres> `country`
+rel `rhianna`,`justin bieber`,`bruno mars` <artists=genres> `pop`

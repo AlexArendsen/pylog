@@ -1,0 +1,28 @@
+rel `color` <type=instances> `red`,`orange`,`yellow`,`green`,`blue`,`purple`
+rel `red` <comes before=comes after> `orange`
+rel `orange` <comes before=comes after> `yellow`
+rel `yellow` <comes before=comes after> `green`
+rel `green` <comes before=comes after> `blue`
+rel `blue` <comes before=comes after> `purple`
+rel `purple` <comes before=comes after> `red`
+rel `red` <symbol=meaning> `love`
+rel `orange` <symbol=meaning> `energy`
+rel `yellow` <symbol=meaning> `joy`
+rel `green` <symbol=meaning> `envy`,`greed`
+rel `blue` <symbol=meaning> `calm`,`friendship`
+rel `purple` <symbol=meaning> `royalty`
+rel `love` <causes=effects> `marriage`,`heartbreak`,`happiness`,`saddness`,`joy`
+rel `energy` <causes=effects> `productivity`
+rel `energy` <antonyms> `tiredness`
+rel `joy` <causes=effects> `joy`,`tiredness`
+rel `joy` <synonyms> `happiness`
+rel `envy` <causes=effects> `hatred`,`corruption`,`animosity`
+rel `greed` <causes=effects> `corruption`
+rel `negative` <connotations=terms> `hatred`,`corruption`,`animosity`,`heartbreak`,`saddness`
+rel `positive` <connotations=terms> `joy`,`happiness`,`love`,`wisdom`,`calm`
+rel `calm` <causes=effects> `sleep`,`wisdom`,`rest`
+rel `sleep` <synonyms> `rest`
+rel `royalty` <causes=effects> `corruption`,`pride`
+rel `greed` <traits=desires> `money`,`power`,`control`,`decadence`
+rel `pride` <traits=desires> `self-edification`,`recognition`,`special treatment`
+rel `wisdom` <traits=desires> `peace`,`happiness`,`understanding`,`knowledge`
