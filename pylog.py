@@ -3,6 +3,7 @@
 # Written by Alex Arendsen, released under the GNU GPLv2.
 # Please do not claim ownership of it.
 
+import sqlite3
 import re
 
 class Graph(object):
@@ -13,6 +14,7 @@ class Graph(object):
 		self.nodes = {}
 		self.relations = []
 		self.relationExpression = re.compile("rel\s+(`.+`)\s*(\<|\=)([a-z\s\=]+)(\>|\=)\s*(`.+`)\s*");
+		self.dbc = None
 
 	def createNode(self,name):
 		out = NodeList([])
@@ -33,13 +35,16 @@ class Graph(object):
 		return self.relations[-1]
 
 	# Get a single node from the graph by name
-	def get(self,name,create=False):
+	def get(self,name,create=False,readCache=1):
 		if type(name) == NodeList:
 			return name
 		elif type(name) == list:
-			return NodeList(flatten([self.get(n,create) for n in name]))
+			return NodeList(flatten([self.get(n,create=create,readCache=readCache) for n in name]))
+
 		if name in self.nodeReg:
 			return NodeList([self.nodeReg[name]])
+		elif type(readCache) == int and readCache > -1 and self.dbc != None:
+			return self.load(name,recursionDepth=readCache)
 		else:
 			if create == False:
 				return NodeList([])
@@ -81,11 +86,11 @@ class Graph(object):
 	def createRelationship(self,leftNames,rightNames,leftToRightRelation,rightToLeftRelation):
 		if type(leftNames) != list:
 			leftNames = [leftNames]
-		left = self.get(leftNames,create=True)
+		left = self.get(leftNames,create=True,readCache=-1)
 
 		if type(rightNames) != list:
 			rightNames = [rightNames]
-		right = self.get(rightNames,create=True)
+		right = self.get(rightNames,create=True,readCache=-1)
 
 		if rightToLeftRelation != "":
 			leftRel = self.createRelationByName(rightToLeftRelation)
@@ -145,6 +150,142 @@ class Graph(object):
 			else:
 				print("Syntax error:\n---");
 				print(tkns);
+
+	# -- Persistence methods
+	def connect(self,filename):
+		if self.dbc != None:
+			self.dbc.close()
+		self.dbc = sqlite3.connect(filename)
+
+		#self.initializeDB();
+
+	def initializeDB(self):
+		if input("Initialize the Database? ") == 'y':
+			c = self.dbc.cursor()
+			c.execute("DROP TABLE IF EXISTS NODES")
+			c.execute("DROP TABLE IF EXISTS RELATIONS")
+			c.execute("DROP TABLE IF EXISTS RELATIONSHIPS")
+			c.execute("""
+					CREATE TABLE NODES (
+						ID INTEGER PRIMARY KEY,
+						NAME TEXT
+						)
+				""")
+			c.execute("""
+					CREATE TABLE RELATIONS (
+						ID INTEGER PRIMARY KEY,
+						NAME TEXT
+						)
+				""")
+			c.execute("""
+					CREATE TABLE RELATIONSHIPS (
+						NODELEFT INT,
+						NODERIGHT INT,
+						RELATION INT,
+						FOREIGN KEY(NODELEFT) REFERENCES NODES(ID),
+						FOREIGN KEY(NODERIGHT) REFERENCES NODES(ID),
+						FOREIGN KEY(RELATION) REFERENCES RELATION(ID)
+						)
+				""")
+			c.execute("""
+					CREATE UNIQUE INDEX
+						UNIQUENODE ON NODES(NAME)
+				""")
+			c.execute("""
+					CREATE UNIQUE INDEX
+						UNIQUERELATION ON RELATIONS(NAME)
+				""")
+			c.execute("""
+					CREATE UNIQUE INDEX
+						UNIQUERELATIONSHIP ON RELATIONSHIPS (
+							NODELEFT,
+							NODERIGHT,
+							RELATION
+						)
+				""")
+			self.dbc.commit()
+			c.close()
+
+	def dump(self):
+		c = self.dbc.cursor()
+
+		idx = c.execute("SELECT MAX(ID) FROM RELATIONS").fetchall()[0][0]
+		if idx == None:
+			idx = 1
+
+		for r in self.relations:
+			if r.name[0] != "_":
+				try:
+					c.execute("INSERT INTO RELATIONS VALUES(?,?)",[idx,r.name])
+					r._dbidx = idx
+					idx += 1
+				except sqlite3.IntegrityError:
+					pass
+		self.dbc.commit()
+
+		idx = c.execute("SELECT MAX(ID) FROM NODES").fetchall()[0][0]
+		if idx == None:
+			idx = 1
+
+		for n in self.nodes:
+			try:
+				c.execute("INSERT INTO NODES VALUES(?,?)",[idx,n.name])
+				n._dbidx = idx
+				idx += 1
+			except sqlite3.IntegrityError:
+				n._dbidx = c.execute("SELECT ID FROM NODES WHERE NAME = ?",[n.name]).fetchall()[0][0]
+
+		for n in self.nodes:
+			for k in self.nodes[n]:
+				if hasattr(k,"_dbidx"):
+					for v in self.nodes[n][k]:
+						try:
+							c.execute("INSERT INTO RELATIONSHIPS VALUES(?,?,?)",[n._dbidx,v._dbidx,k._dbidx])
+						except sqlite3.IntegrityError:
+							pass
+		self.dbc.commit()
+		c.close()
+
+	def load(self,name,recursionDepth=0):
+		ex = self.get(name,readCache=-1)
+		if ex.rel('_loaded').isEmpty():
+			c = self.dbc.cursor()
+			res = c.execute("SELECT ID FROM NODES WHERE NAME = ?",[name]).fetchall()
+			if len(res) > 0:
+				ex = self.createNode(name)
+				rel = c.execute("""
+						SELECT
+							LFT.NAME,
+							RGT.NAME,
+							R.NAME
+						FROM
+							RELATIONSHIPS K,
+							NODES LFT,
+							NODES RGT,
+							RELATIONS R
+						WHERE
+							LFT.ID = K.NODELEFT
+							AND RGT.ID = K.NODERIGHT
+							AND R.ID = K.RELATION
+							AND (
+								LFT.ID = ?
+								OR RGT.ID = ?
+							)
+					""",[res[0][0],res[0][0]]).fetchall()
+				self.createOneWay(ex,"_loaded","true")
+				agenda = []
+				for tup in rel:
+					l = self.get(tup[0],create=True,readCache=-1)
+					if l.rel('_loaded').isEmpty():
+						self.createOneWay(tup[1],l,tup[2])
+						if tup[0] == name and recursionDepth > 0:
+							agenda.append(tup[1])
+
+				if recursionDepth > 0:
+					for a in agenda:
+						self.load(a,recursionDepth=recursionDepth-1)
+		return ex
+
 
 class Node(object):
 	"""A node in the graph"""
