@@ -152,6 +152,9 @@ class Graph(object):
 				print(tkns);
 
 	# -- Persistence methods
+
+	# Connect to a SQLite Database, creates new Database if one with the given
+	#	file name doesn't exist
 	def connect(self,filename):
 		if self.dbc != None:
 			self.dbc.close()
@@ -159,32 +162,33 @@ class Graph(object):
 
 		#self.initializeDB();
 
+	# Initialize the connected database. Will remove all existing graph data
 	def initializeDB(self):
-		if input("Initialize the Database? ") == 'y':
+		if input("Initialize the Database? (All graph data will be removed) ") == 'y':
 			c = self.dbc.cursor()
 			c.execute("DROP TABLE IF EXISTS NODES")
 			c.execute("DROP TABLE IF EXISTS RELATIONS")
 			c.execute("DROP TABLE IF EXISTS RELATIONSHIPS")
 			c.execute("""
 					CREATE TABLE NODES (
-						ID INTEGER PRIMARY KEY,
-						NAME TEXT
+							ID INTEGER PRIMARY KEY,
+							NAME TEXT
 						)
 				""")
 			c.execute("""
 					CREATE TABLE RELATIONS (
-						ID INTEGER PRIMARY KEY,
-						NAME TEXT
+							ID INTEGER PRIMARY KEY,
+							NAME TEXT
 						)
 				""")
 			c.execute("""
 					CREATE TABLE RELATIONSHIPS (
-						NODELEFT INT,
-						NODERIGHT INT,
-						RELATION INT,
-						FOREIGN KEY(NODELEFT) REFERENCES NODES(ID),
-						FOREIGN KEY(NODERIGHT) REFERENCES NODES(ID),
-						FOREIGN KEY(RELATION) REFERENCES RELATION(ID)
+							NODELEFT INT,
+							NODERIGHT INT,
+							RELATION INT,
+							FOREIGN KEY(NODELEFT) REFERENCES NODES(ID),
+							FOREIGN KEY(NODERIGHT) REFERENCES NODES(ID),
+							FOREIGN KEY(RELATION) REFERENCES RELATION(ID)
 						)
 				""")
 			c.execute("""
@@ -206,12 +210,15 @@ class Graph(object):
 			self.dbc.commit()
 			c.close()
 
+	# Put all unstored graph data into the connected database.
 	def dump(self):
 		c = self.dbc.cursor()
 
 		idx = c.execute("SELECT MAX(ID) FROM RELATIONS").fetchall()[0][0]
 		if idx == None:
 			idx = 1
+		else:
+			idx += 1
 
 		for r in self.relations:
 			if r.name[0] != "_":
@@ -226,6 +233,8 @@ class Graph(object):
 		idx = c.execute("SELECT MAX(ID) FROM NODES").fetchall()[0][0]
 		if idx == None:
 			idx = 1
+		else:
+			idx += 1
 
 		for n in self.nodes:
 			try:
@@ -246,6 +255,7 @@ class Graph(object):
 		self.dbc.commit()
 		c.close()
 
+	# Read graph data from database starting at node with the given name
 	def load(self,name,recursionDepth=0):
 		ex = self.get(name,readCache=-1)
 		if ex.rel('_loaded').isEmpty():
