@@ -5,6 +5,7 @@
 
 import sqlite3
 import re
+import sys
 
 class Graph(object):
 	"""An object representing a graph of nodes related in multiple dimensions"""
@@ -227,7 +228,7 @@ class Graph(object):
 					r._dbidx = idx
 					idx += 1
 				except sqlite3.IntegrityError:
-					pass
+					r._dbidx = c.execute("SELECT ID FROM RELATIONS WHERE NAME = ?",[r.name]).fetchall()[0][0]
 		self.dbc.commit()
 
 		idx = c.execute("SELECT MAX(ID) FROM NODES").fetchall()[0][0]
@@ -250,8 +251,10 @@ class Graph(object):
 					for v in self.nodes[n][k]:
 						try:
 							c.execute("INSERT INTO RELATIONSHIPS VALUES(?,?,?)",[n._dbidx,v._dbidx,k._dbidx])
-						except sqlite3.IntegrityError:
+						except sqlite3.IntegrityError as e:
 							pass
+				else:
+					print("[ERROR] {0}: Relation ID not found".format(k.name))
 		self.dbc.commit()
 		c.close()
 
@@ -352,7 +355,8 @@ class NodeList(object):
 			yield n
 
 	def append(self,node):
-		self.nodes.append(node)
+		if node not in self.nodes:
+			self.nodes.append(node)
 
 	def remove(self,node):
 		self.nodes.remove(node)
