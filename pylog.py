@@ -17,40 +17,77 @@ class Graph(object):
 		self.relationExpression = re.compile("rel\s+(`.+`)\s*(\<|\=)([a-z\s\=]+)(\>|\=)\s*(`.+`)\s*");
 		self.dbc = None
 
-	def createNode(self,name):
-		out = NodeList([])
+	### -----
+	### -- Node Methods
+	### -----
+
+	def _createNode(self,name):
 		if type(name) == list:
-			return NodeList(flatten([self.createNode(n) for n in name]))
+			return [self.createNode(n) for n in name]
 		elif type(name) == str:
 			if name not in self.nodeReg:
 				n = self.nodeReg[name] = Node(name,self)
 				self.nodes[n] = {}
-				return NodeList([n])
+				return [n]
 			else:
-				return NodeList([self.nodeReg[name]])
+				return [self.nodeReg[name]]
 		else:
+			return []
+
+	def createNode(self,name):
+		return NodeList(flatten(self._createNode(name)))
+	
+	# Get nodes from the graph by name
+	def _get(self,name,create=False,readCache=0):
+		if type(readCache) != int:
+			readCache = 0
+
+		if type(name) != list:
+			name = [name]
+		if type(name) == list:
+			if readCache > -1 and self.dbc != None:
+				return self.load(name)
+			else:
+				return self._resolve(name,create)
+
+	def get(self,name,create=False,readCache=0):
+		r = self._get(name,create,readCache)
+		if r == None:
 			return NodeList([])
+		else:
+			return NodeList(flatten(r))
+
+	def _resolve(self,name,create=False):
+		if type(name) == list or type(name) == NodeList:
+			return flatten([self._resolve(n,create) for n in name])
+		if type(name) == Node:
+			return name
+		if type(name) == str:
+			if name in self.nodeReg:
+				return [self.nodeReg[name]]
+			else:
+				if create:
+					return [self.createNode(name)]
+				else:
+					return []
+
+	def resolve(self,name):
+		return NodeList(self._resolve(name))
+
+	### -----
+	### -- Relation Methods
+	### -----
 
 	def createRelation(self,name):
 		self.relations.append(Relation(name));
 		return self.relations[-1]
 
-	# Get a single node from the graph by name
-	def get(self,name,create=False,readCache=1):
-		if type(name) == NodeList:
-			return name
-		elif type(name) == list:
-			return NodeList(flatten([self.get(n,create=create,readCache=readCache) for n in name]))
-
-		if name in self.nodeReg:
-			return NodeList([self.nodeReg[name]])
-		elif type(readCache) == int and readCache > -1 and self.dbc != None:
-			return self.load(name,recursionDepth=readCache)
-		else:
-			if create == False:
-				return NodeList([])
-			else:
-				return self.createNode(name)
+	# Get relation from graph by name, creating one if it doesn't exist
+	def createRelationByName(self, name):
+		rel = self.getRelationByName(name)
+		if rel == None:
+			rel = self.createRelation(name)
+		return rel
 
 	# Get relation from graph by name
 	def getRelationByName(self, name):
@@ -62,14 +99,16 @@ class Graph(object):
 
 	# Get all nodes associated with the relation by the given name
 	def rel(self,name):
-		return NodeList(self.getRelationByName(name).nodes);
+		r = self.getRelationByName(name)
+		if r == None:
+			return NodeList([])
+		else:
+			return NodeList(r.nodes)
 
-	# Get relation from graph by name, creating one if it doesn't exist
-	def createRelationByName(self, name):
-		rel = self.getRelationByName(name)
-		if rel == None:
-			rel = self.createRelation(name)
-		return rel
+
+	### ----
+	### -- Relationship methods
+	### ----
 
 	# Alias for Graph.createRelationship, creates symmetric relationship
 	# 	between 
@@ -152,7 +191,9 @@ class Graph(object):
 				print("Syntax error:\n---");
 				print(tkns);
 
+	### -----
 	# -- Persistence methods
+	### -----
 
 	# Connect to a SQLite Database, creates new Database if one with the given
 	#	file name doesn't exist
@@ -160,8 +201,6 @@ class Graph(object):
 		if self.dbc != None:
 			self.dbc.close()
 		self.dbc = sqlite3.connect(filename)
-
-		#self.initializeDB();
 
 	# Initialize the connected database. Will remove all existing graph data
 	def initializeDB(self):
@@ -260,12 +299,31 @@ class Graph(object):
 
 	# Read graph data from database starting at node with the given name
 	def load(self,name,recursionDepth=0):
-		ex = self.get(name,readCache=-1)
-		if ex.rel('_loaded').isEmpty():
+
+		# Make sure name is a list of string names
+		if type(name) == NodeList:
+			name = [n.name for n in name.nodes]
+		elif type(name) == Node:
+			name = [name.name]
+		elif type(name) == str:
+			name = [name]
+
+		# Get names of unloaded / non-existent nodes matching input name(s)
+		nex = []
+		for n in name:
+			if not self.resolve(n).isLoaded():
+				nex.append(n)
+
+		if len(nex):
+
 			c = self.dbc.cursor()
-			res = c.execute("SELECT ID FROM NODES WHERE NAME = ?",[name]).fetchall()
+
+			# Query DB to get list of IDs for each node in the existing list `nex`
+			res = [(str)(r[0]) for r in c.execute("SELECT ID FROM NODES WHERE NAME IN (%s)" % ','.join('?'*len(nex)),nex).fetchall()]
+
 			if len(res) > 0:
-				ex = self.createNode(name)
+
+				# Get all relationships in which the existing nodes participate
 				rel = c.execute("""
 						SELECT
 							LFT.NAME,
@@ -281,23 +339,18 @@ class Graph(object):
 							AND RGT.ID = K.NODERIGHT
 							AND R.ID = K.RELATION
 							AND (
-								LFT.ID = ?
-								OR RGT.ID = ?
+								LFT.ID IN (%s)
+								OR RGT.ID IN (%s)
 							)
-					""",[res[0][0],res[0][0]]).fetchall()
-				self.createOneWay(ex,"_loaded","true")
-				agenda = []
-				for tup in rel:
-					l = self.get(tup[0],create=True,readCache=-1)
-					if l.rel('_loaded').isEmpty():
-						self.createOneWay(tup[1],l,tup[2])
-						if tup[0] == name and recursionDepth > 0:
-							agenda.append(tup[1])
+					""" % (','.join('?'*len(res)),','.join('?'*len(res))),res*2).fetchall()
 
-				if recursionDepth > 0:
-					for a in agenda:
-						self.load(a,recursionDepth=recursionDepth-1)
-		return ex
+				# Load the relationships into the graph
+				for tup in rel:
+					self.createRelationship(tup[1],tup[0],tup[2],"")
+
+				# After all the loading is done, set all input nodes to loaded
+				self.resolve(name).setLoaded(True)
+		return self.resolve(name)
 
 
 class Node(object):
@@ -307,6 +360,7 @@ class Node(object):
 		self.name = name
 		self.relationships = {}
 		self.parent = parent
+		self.loaded = False
 
 	def __str__(self):
 		return self.name;
@@ -320,7 +374,7 @@ class Node(object):
 		relation = self.parent.getRelationByName(relation)
 		s = self.parent.nodes[self]
 		if relation in s:
-			return NodeList(self.parent.nodes[self][relation])
+			return self.parent.get(self.parent.nodes[self][relation],readCache=0)
 		else:
 			return NodeList([])
 
@@ -331,6 +385,12 @@ class Node(object):
 	# Display dictionary of this node's related nodes
 	def info(self):
 		return self.parent.nodes[self]
+
+	def isLoaded(self):
+		return self.loaded
+
+	def setLoaded(self,l):
+		self.loaded = l
 
 
 class NodeList(object):
@@ -363,6 +423,18 @@ class NodeList(object):
 
 	def isEmpty(self):
 		return len(self.nodes) == 0
+
+	def isLoaded(self):
+		if len(self.nodes) == 0:
+			return False
+		for n in self.nodes:
+			if n.loaded == False:
+				return False
+		return True
+
+	def setLoaded(self,l):
+		for n in self.nodes:
+			n.setLoaded(l)
 
 	# Applies `rel` for all contained nodes,
 	def rel(self,name):
