@@ -301,8 +301,8 @@ class Graph(object):
 	def load(self,name,recursionDepth=0):
 
 		# Make sure name is a list of string names
-		if type(name) == NodeList:
-			name = [n.name for n in name.nodes]
+		if type(name) == NodeList or type(name) == list:
+			name = [n if type(n) == str else n.name for n in flatten(name)]
 		elif type(name) == Node:
 			name = [name.name]
 		elif type(name) == str:
