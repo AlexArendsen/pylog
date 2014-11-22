@@ -1,11 +1,9 @@
-# Pylog, Relational Intelligence Enging for Python
+# Pylog, Relational Intelligence Engine for Python
 # ---
 # Written by Alex Arendsen, released under the GNU GPLv2.
-# Please do not claim ownership of it.
 
 import sqlite3
 import re
-import sys
 
 class Graph(object):
 	"""An object representing a graph of nodes related in multiple dimensions"""
@@ -37,7 +35,7 @@ class Graph(object):
 	def createNode(self,name):
 		return NodeList(flatten(self._createNode(name)))
 	
-	# Get nodes from the graph by name
+	# Private helper for Graph.get
 	def _get(self,name,create=False,readCache=0):
 		if type(readCache) != int:
 			readCache = 0
@@ -50,6 +48,12 @@ class Graph(object):
 			else:
 				return self._resolve(name,create)
 
+	# Get nodes from the graph by name. Input can be a string, Node, or NodeList
+	#	Set create=True to create a node with the given name(s) if
+	#	none are found
+	#
+	#	Will automatically read from a database if one is connected;
+	#	set readCache=-1 to disable
 	def get(self,name,create=False,readCache=0):
 		r = self._get(name,create,readCache)
 		if r == None:
@@ -57,6 +61,7 @@ class Graph(object):
 		else:
 			return NodeList(flatten(r))
 
+	# Private helper for Graph.resolve
 	def _resolve(self,name,create=False):
 		if type(name) == list or type(name) == NodeList:
 			return flatten([self._resolve(n,create) for n in name])
@@ -71,6 +76,7 @@ class Graph(object):
 				else:
 					return []
 
+	# Get node(s) with the given name(s). Can accept string, Node, list, or NodeList
 	def resolve(self,name):
 		return NodeList(self._resolve(name))
 
@@ -192,7 +198,7 @@ class Graph(object):
 				print(tkns);
 
 	### -----
-	# -- Persistence methods
+	### -- Persistence methods
 	### -----
 
 	# Connect to a SQLite Database, creates new Database if one with the given
