@@ -1,5 +1,5 @@
 # First, import Pylog
-from pylog import *
+from graph import *
 
 # --- Populating graph
 
